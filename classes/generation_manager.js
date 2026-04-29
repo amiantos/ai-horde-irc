@@ -45,11 +45,35 @@ class GenerationManager {
     this.config = config;
     this.pollIntervalMs = (config.poll_interval_seconds || 10) * 1000;
     this.timeoutMs = (config.request_timeout_seconds || 600) * 1000;
-    this.inFlight = new Map(); // account -> requestId
+    this.heartbeatIntervalMs =
+      (config.heartbeat_interval_seconds || 60) * 1000;
+    this.inFlight = new Map(); // account -> { id, hordeId, nick, cancel }
   }
 
   isBusy(account) {
     return this.inFlight.has(account);
+  }
+
+  getInFlight(account) {
+    return this.inFlight.get(account) || null;
+  }
+
+  // Cancel an in-flight request: tells the horde to drop it, marks the row
+  // failed, and removes the inFlight entry so the user can submit again.
+  async cancel(account, reason = "cancelled by user") {
+    const entry = this.inFlight.get(account);
+    if (!entry) return false;
+    entry.cancelled = true;
+    if (entry.hordeId) {
+      this.horde.cancelGeneration(entry.hordeId).catch(() => {});
+    }
+    this.db.updateRequest(entry.id, {
+      status: "failed",
+      error: reason,
+      completed_at: Date.now(),
+    });
+    this.inFlight.delete(account);
+    return true;
   }
 
   async start({ account, apiKey, nick, channel, source, prompt, negative, styleName }) {
@@ -87,10 +111,11 @@ class GenerationManager {
       status: "submitted",
       created_at: Date.now(),
     });
-    this.inFlight.set(account, id);
+    const entry = { id, hordeId: null, nick, prompt, cancelled: false };
+    this.inFlight.set(account, entry);
 
     // Run async — caller doesn't await
-    this.run({ id, shortId, account, apiKey, nick, channel, source, prompt, payload, style }).catch(
+    this.run({ id, shortId, account, apiKey, nick, channel, source, prompt, payload, style, entry }).catch(
       (err) => {
         this.logger.error(`Generation ${id} crashed: ${err.message}`);
         this.fail(id, account, nick, `internal error: ${err.message}`);
@@ -109,7 +134,7 @@ class GenerationManager {
     return generateShortId() + ID_ALPHABET[Math.floor(Math.random() * ID_ALPHABET.length)];
   }
 
-  async run({ id, shortId, account, apiKey, nick, channel, source, prompt, payload, style }) {
+  async run({ id, shortId, account, apiKey, nick, channel, source, prompt, payload, style, entry }) {
     let submitRes;
     try {
       submitRes = await this.horde.submitGeneration(payload, apiKey);
@@ -124,6 +149,7 @@ class GenerationManager {
       return this.fail(id, account, nick, "horde returned no generation id");
     }
 
+    entry.hordeId = hordeId;
     this.db.updateRequest(id, { horde_id: hordeId, status: "processing" });
     this.dm(
       nick,
@@ -132,9 +158,17 @@ class GenerationManager {
 
     const start = Date.now();
     let lastStatus = null;
+    let lastDmAt = Date.now();
+    let consecutiveCheckFailures = 0;
 
     while (true) {
+      if (entry.cancelled) {
+        this.logger.info(`Generation ${id} cancelled mid-poll`);
+        return; // cancel() already cleaned up DB + inFlight
+      }
+
       if (Date.now() - start > this.timeoutMs) {
+        this.logger.warn(`Generation ${id} hit ${Math.round(this.timeoutMs / 1000)}s timeout`);
         await this.horde.cancelGeneration(hordeId);
         return this.fail(id, account, nick, `timed out after ${Math.round(this.timeoutMs / 1000)}s`);
       }
@@ -144,10 +178,26 @@ class GenerationManager {
       let check;
       try {
         check = await this.horde.checkGeneration(hordeId);
+        consecutiveCheckFailures = 0;
       } catch (err) {
-        this.logger.warn(`Check failed for ${id}: ${err.message}`);
+        consecutiveCheckFailures++;
+        this.logger.warn(
+          `Check failed for ${id} (attempt ${consecutiveCheckFailures}): ${err.message}`
+        );
+        if (consecutiveCheckFailures >= 12) {
+          return this.fail(
+            id,
+            account,
+            nick,
+            `lost contact with horde after ${consecutiveCheckFailures} failed polls (last error: ${err.message})`
+          );
+        }
         continue;
       }
+
+      this.logger.debug(
+        `Poll ${id.slice(0, 8)} done=${check.done} proc=${check.processing} wait=${check.waiting} q=${check.queue_position} possible=${check.is_possible} faulted=${check.faulted}`
+      );
 
       if (check.faulted) {
         return this.fail(id, account, nick, "generation faulted on horde");
@@ -160,9 +210,13 @@ class GenerationManager {
       }
 
       const sig = `q=${check.queue_position}|p=${check.processing}|w=${check.waiting}`;
-      if (sig !== lastStatus) {
+      const now = Date.now();
+      const heartbeatDue = now - lastDmAt >= this.heartbeatIntervalMs;
+      if (sig !== lastStatus || heartbeatDue) {
         lastStatus = sig;
-        this.dm(nick, formatStatus(check));
+        lastDmAt = now;
+        const elapsed = Math.round((now - start) / 1000);
+        this.dm(nick, `${formatStatus(check)} | ${elapsed}s elapsed`);
       }
     }
 

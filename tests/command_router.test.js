@@ -28,6 +28,13 @@ test("LOGOUT, USERINFO, HELP recognized", () => {
   assert.equal(parseDmCommand("help").type, "HELP");
 });
 
+test("STATUS and CANCEL recognized", () => {
+  assert.equal(parseDmCommand("STATUS").type, "STATUS");
+  assert.equal(parseDmCommand("status").type, "STATUS");
+  assert.equal(parseDmCommand("CANCEL").type, "CANCEL");
+  assert.equal(parseDmCommand("cancel").type, "CANCEL");
+});
+
 test("STYLES requires a query", () => {
   const a = parseDmCommand("STYLES");
   assert.equal(a.type, "STYLES");

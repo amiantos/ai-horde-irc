@@ -32,6 +32,10 @@ function parseDmCommand(text) {
       return { type: "LOGOUT" };
     case "USERINFO":
       return { type: "USERINFO" };
+    case "STATUS":
+      return { type: "STATUS" };
+    case "CANCEL":
+      return { type: "CANCEL" };
     case "STYLES":
     case "SEARCH":
       if (!rest) return { type: "STYLES", error: "missing query" };

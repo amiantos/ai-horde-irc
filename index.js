@@ -18,10 +18,10 @@ const {
 const WebServer = require("./web/server");
 
 const HELP_LINES = [
-  "AIHorde — DM commands: LOGIN <api-key>, LOGOUT, USERINFO, STYLES <query>, HELP",
+  "AIHorde — DM commands: LOGIN <api-key>, LOGOUT, USERINFO, STYLES <query>, STATUS, CANCEL, HELP",
   "Image request (channel or DM): \"AIHorde: <prompt> [--style <name>] [--negative <text>]\"",
   "Anyone can request images — anonymous requests use the horde's shared pool (slower). LOGIN with your own API key for priority + kudos tracking. LOGIN requires NickServ identification.",
-  "STYLES searches available style names and links to preview images. Status updates are DM-only; final image URL goes back to the channel where you asked.",
+  "STYLES searches available style names with preview images. STATUS shows your in-flight request. CANCEL aborts your in-flight request. Status updates are DM-only; final image URL goes back to the channel where you asked.",
 ];
 
 async function main() {
@@ -95,7 +95,7 @@ async function dispatch({ msg, irc, db, nickserv, horde, styles, genManager, bot
   if (msg.isPrivate) {
     const cmd = parseDmCommand(msg.message);
     if (cmd) {
-      return handleDmCommand({ cmd, msg, irc, db, nickserv, horde, styles, logger });
+      return handleDmCommand({ cmd, msg, irc, db, nickserv, horde, styles, genManager, logger });
     }
     // Else fall through — treat DM-style image requests below.
   }
@@ -112,7 +112,7 @@ async function dispatch({ msg, irc, db, nickserv, horde, styles, genManager, bot
   }
 }
 
-async function handleDmCommand({ cmd, msg, irc, db, nickserv, horde, styles, logger }) {
+async function handleDmCommand({ cmd, msg, irc, db, nickserv, horde, styles, genManager, logger }) {
   const replyTo = msg.nick;
   switch (cmd.type) {
     case "HELP":
@@ -175,6 +175,50 @@ async function handleDmCommand({ cmd, msg, irc, db, nickserv, horde, styles, log
       } catch (err) {
         irc.send(replyTo, `find_user failed: ${apiErr(err)}`);
       }
+      return;
+    }
+    case "STATUS": {
+      // Find the user's in-flight request via either NickServ account or anon key.
+      const account = await nickserv.getAccount(msg.nick);
+      const candidates = [];
+      if (account) candidates.push(account.toLowerCase());
+      candidates.push(`anon:${msg.nick.toLowerCase()}`);
+      let entry = null;
+      let matchedKey = null;
+      for (const key of candidates) {
+        const e = genManager.getInFlight(key);
+        if (e) { entry = e; matchedKey = key; break; }
+      }
+      if (!entry) {
+        irc.send(replyTo, "no in-flight request.");
+        return;
+      }
+      const row = db.getRequest(entry.id);
+      const elapsed = row ? Math.round((Date.now() - row.created_at) / 1000) : "?";
+      const hordeIdShort = entry.hordeId ? entry.hordeId.split("-")[0] : "(submitting)";
+      irc.send(
+        replyTo,
+        `in-flight: ${row ? row.status : "?"} | id ${hordeIdShort} | ${elapsed}s elapsed | account ${matchedKey}`
+      );
+      return;
+    }
+    case "CANCEL": {
+      const account = await nickserv.getAccount(msg.nick);
+      const candidates = [];
+      if (account) candidates.push(account.toLowerCase());
+      candidates.push(`anon:${msg.nick.toLowerCase()}`);
+      let cancelled = false;
+      for (const key of candidates) {
+        if (genManager.isBusy(key)) {
+          await genManager.cancel(key);
+          cancelled = true;
+          break;
+        }
+      }
+      irc.send(
+        replyTo,
+        cancelled ? "request cancelled." : "no in-flight request to cancel."
+      );
       return;
     }
     case "STYLES": {
