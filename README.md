@@ -4,6 +4,8 @@ An IRC bot that lets people generate images on the [AI Horde](https://aihorde.ne
 
 A small basic-auth-gated web dashboard tracks logins, request history, kudos spent, and lets you click through to generated images.
 
+> **Try it live:** an instance is running as **AIHorde** on **irc.libera.chat** — join `#aihorde` and try it out.
+
 ## Quick example
 
 ```
