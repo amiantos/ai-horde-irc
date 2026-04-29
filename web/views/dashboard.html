@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AIHorde IRC Dashboard</title>
+<style>
+  :root {
+    --bg: #16213e;
+    --panel: #1f2a4a;
+    --panel-2: #182040;
+    --border: #2c3a63;
+    --text: #e6e9f5;
+    --muted: #8b94b8;
+    --accent: #4ecca3;
+    --warn: #f9ed69;
+    --err: #e94560;
+    --link: #3282b8;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
+  header { background: var(--panel); padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  header h1 { margin: 0; font-size: 18px; font-weight: 600; }
+  header .actions button { background: var(--link); color: white; border: 0; padding: 8px 14px; border-radius: 4px; cursor: pointer; font-size: 13px; }
+  header .actions button:hover { background: #2a6f9f; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; padding: 16px 20px; }
+  .stat { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; }
+  .stat .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .stat .value { font-size: 22px; font-weight: 600; color: var(--accent); }
+  .container { display: grid; grid-template-columns: 280px 1fr; gap: 16px; padding: 0 20px 20px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .panel h2 { margin: 0; padding: 10px 14px; background: var(--panel-2); border-bottom: 1px solid var(--border); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
+  .panel .body { padding: 8px 0; max-height: 70vh; overflow-y: auto; }
+  .user-row { padding: 10px 14px; cursor: pointer; border-bottom: 1px solid var(--border); transition: background 0.15s; }
+  .user-row:hover { background: var(--panel-2); }
+  .user-row.active { background: var(--panel-2); border-left: 3px solid var(--accent); }
+  .user-row .name { font-weight: 600; }
+  .user-row .meta { color: var(--muted); font-size: 11px; margin-top: 2px; }
+  .request-row { padding: 12px 14px; border-bottom: 1px solid var(--border); }
+  .request-row .head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .request-row .id { color: var(--muted); font-family: monospace; font-size: 11px; }
+  .request-row .status { font-size: 11px; padding: 2px 6px; border-radius: 3px; text-transform: uppercase; }
+  .status.done { background: rgba(78, 204, 163, 0.2); color: var(--accent); }
+  .status.failed { background: rgba(233, 69, 96, 0.2); color: var(--err); }
+  .status.processing, .status.submitted { background: rgba(50, 130, 184, 0.2); color: var(--link); }
+  .status.censored { background: rgba(249, 237, 105, 0.2); color: var(--warn); }
+  .request-row .prompt { margin-top: 6px; font-size: 13px; line-height: 1.4; word-break: break-word; }
+  .request-row .meta { color: var(--muted); font-size: 11px; margin-top: 6px; display: flex; gap: 12px; flex-wrap: wrap; }
+  .request-row a { color: var(--link); }
+  .empty { padding: 24px; text-align: center; color: var(--muted); }
+  .image-thumb { display: block; max-width: 200px; max-height: 200px; margin-top: 8px; border-radius: 4px; border: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<header>
+  <h1>AIHorde IRC Dashboard</h1>
+  <div class="actions"><button id="refresh-btn">Refresh</button></div>
+</header>
+<div class="stats" id="stats"></div>
+<div class="container">
+  <div class="panel">
+    <h2>Users</h2>
+    <div id="users" class="body"><div class="empty">Loading…</div></div>
+  </div>
+  <div class="panel">
+    <h2 id="requests-title">Recent requests</h2>
+    <div id="requests" class="body"><div class="empty">Loading…</div></div>
+  </div>
+</div>
+<script>
+let activeAccount = null;
+
+function fmtTime(ts) {
+  if (!ts) return "—";
+  const d = new Date(ts);
+  return d.toLocaleString();
+}
+
+function fmtDur(start, end) {
+  if (!start || !end) return null;
+  const sec = Math.round((end - start) / 1000);
+  if (sec < 60) return `${sec}s`;
+  return `${Math.round(sec / 60)}m${sec % 60}s`;
+}
+
+function escapeHtml(s) {
+  if (s == null) return "";
+  return String(s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[c]));
+}
+
+async function loadStats() {
+  const res = await fetch("/api/stats");
+  const s = await res.json();
+  const cards = [
+    { label: "Users", value: s.user_count },
+    { label: "Requests today", value: s.request_count_today },
+    { label: "Kudos today", value: Math.round(s.kudos_today) },
+    { label: "Total requests", value: s.request_count_total },
+    { label: "Total kudos", value: Math.round(s.kudos_total) },
+    { label: "Failed", value: s.failed_count },
+  ];
+  document.getElementById("stats").innerHTML = cards.map(c =>
+    `<div class="stat"><div class="label">${c.label}</div><div class="value">${c.value}</div></div>`
+  ).join("");
+}
+
+async function loadUsers() {
+  const res = await fetch("/api/users");
+  const users = await res.json();
+  const el = document.getElementById("users");
+  if (!users.length) { el.innerHTML = '<div class="empty">No users yet</div>'; return; }
+  el.innerHTML = users.map(u => `
+    <div class="user-row${activeAccount === u.account ? " active" : ""}" data-account="${escapeHtml(u.account)}">
+      <div class="name">${escapeHtml(u.account)}</div>
+      <div class="meta">${u.request_count} requests · last ${u.last_request_at ? fmtTime(u.last_request_at) : "never"}</div>
+    </div>
+  `).join("");
+  el.querySelectorAll(".user-row").forEach(row => {
+    row.addEventListener("click", () => {
+      activeAccount = row.dataset.account;
+      loadUsers();
+      loadRequests();
+    });
+  });
+}
+
+async function loadRequests() {
+  const url = activeAccount
+    ? `/api/users/${encodeURIComponent(activeAccount)}/requests?limit=100`
+    : "/api/requests?limit=100";
+  document.getElementById("requests-title").textContent =
+    activeAccount ? `Requests by ${activeAccount}` : "Recent requests";
+  const res = await fetch(url);
+  const rows = await res.json();
+  const el = document.getElementById("requests");
+  if (!rows.length) { el.innerHTML = '<div class="empty">No requests</div>'; return; }
+  el.innerHTML = rows.map(r => {
+    const dur = fmtDur(r.created_at, r.completed_at);
+    const meta = [
+      r.account,
+      r.channel,
+      r.style ? `style: ${r.style}` : "no style",
+      `created ${fmtTime(r.created_at)}`,
+      dur ? `took ${dur}` : null,
+      r.kudos != null ? `${Math.round(r.kudos)} kudos` : null,
+    ].filter(Boolean).map(escapeHtml).join(" · ");
+    const link = r.r2_image_url
+      ? `<div style="margin-top:6px"><a href="${escapeHtml(r.r2_image_url)}" target="_blank">${escapeHtml(r.r2_image_url)}</a><br><img class="image-thumb" src="${escapeHtml(r.r2_image_url)}" loading="lazy" /></div>`
+      : "";
+    const err = r.error ? `<div style="margin-top:6px;color:var(--err)">${escapeHtml(r.error)}</div>` : "";
+    const neg = r.negative_prompt ? `<div style="margin-top:4px;color:var(--muted);font-size:12px">neg: ${escapeHtml(r.negative_prompt)}</div>` : "";
+    return `
+      <div class="request-row">
+        <div class="head">
+          <span class="id">${escapeHtml(r.id.slice(0, 8))}</span>
+          <span class="status ${escapeHtml(r.status)}">${escapeHtml(r.status)}</span>
+        </div>
+        <div class="prompt">${escapeHtml(r.prompt)}</div>
+        ${neg}
+        <div class="meta">${meta}</div>
+        ${err}
+        ${link}
+      </div>
+    `;
+  }).join("");
+}
+
+async function refresh() {
+  await Promise.all([loadStats(), loadUsers(), loadRequests()]);
+}
+
+document.getElementById("refresh-btn").addEventListener("click", refresh);
+refresh();
+setInterval(refresh, 15000);
+</script>
+</body>
+</html>

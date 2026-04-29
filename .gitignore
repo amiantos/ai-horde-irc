@@ -1,0 +1,29 @@
+# dependencies
+node_modules/
+
+# runtime data (SQLite DB, styles cache, etc.)
+data/
+
+# secrets — copy conf/config.json.example to conf/config.json and fill in
+conf/config.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# editors
+.vscode/
+.idea/
+*.swp
+*~
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# env
+.env
+.env.*
+!.env.example

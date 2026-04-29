@@ -1,0 +1,36 @@
+{
+  "irc": {
+    "host": "irc.libera.chat",
+    "port": 6697,
+    "tls": true,
+    "nick": "AIHorde",
+    "username": "AIHorde",
+    "realname": "AI Horde Image Generation Bot",
+    "password": "<NickServ password for AIHorde nick>",
+    "sasl": true,
+    "channels": ["#aihorde", "#amiantos"],
+    "max_line_length": 350
+  },
+  "horde": {
+    "base_url": "https://aihorde.net/api/v2",
+    "client_agent": "AIHorde-IRC:0.1:https://github.com/amiantos/ai-horde-irc",
+    "poll_interval_seconds": 10,
+    "request_timeout_seconds": 600
+  },
+  "r2": {
+    "endpoint": "<R2_ENDPOINT_URL>",
+    "bucket": "<R2_BUCKET>",
+    "access_key_id": "<R2_ACCESS_KEY>",
+    "secret_access_key": "<R2_SECRET>",
+    "key_prefix": "",
+    "public_base_url": "https://images.example.com"
+  },
+  "web": {
+    "enabled": true,
+    "port": 3243,
+    "auth": {
+      "username": "admin",
+      "password": "<DASHBOARD_PASSWORD>"
+    }
+  }
+}
