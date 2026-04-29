@@ -111,7 +111,7 @@ class GenerationManager {
       status: "submitted",
       created_at: Date.now(),
     });
-    const entry = { id, hordeId: null, nick, prompt, cancelled: false };
+    const entry = { id, account, hordeId: null, nick, prompt, cancelled: false };
     this.inFlight.set(account, entry);
 
     // Run async — caller doesn't await
@@ -220,12 +220,16 @@ class GenerationManager {
       }
     }
 
+    if (entry.cancelled) return;
+
     let statusRes;
     try {
       statusRes = await this.horde.getGenerationStatus(hordeId);
     } catch (err) {
       return this.fail(id, account, nick, `failed to fetch result: ${err.message}`);
     }
+
+    if (entry.cancelled) return;
 
     const gen = (statusRes.generations || [])[0];
     if (!gen || !gen.img) {
@@ -249,6 +253,7 @@ class GenerationManager {
       r2Url = await this.r2.upload(gen.img, shortId);
     } catch (err) {
       this.logger.error(`R2 upload failed for ${id}: ${err.message}`);
+      if (entry.cancelled) return;
       this.db.updateRequest(id, {
         status: "failed",
         error: `r2 upload failed: ${err.message}`,
@@ -259,6 +264,8 @@ class GenerationManager {
       this.dm(nick, `image generated but R2 upload failed; raw URL: ${gen.img}`);
       return;
     }
+
+    if (entry.cancelled) return;
 
     this.db.updateRequest(id, {
       status: "done",
@@ -285,6 +292,13 @@ class GenerationManager {
   }
 
   fail(id, account, nick, reason) {
+    // If cancel() (or a prior fail) has already cleaned up this account, or
+    // a new request has taken its slot, this call is a stale follow-up from
+    // a polling loop that didn't notice — skip silently to avoid duplicate
+    // DMs and DB writes.
+    const entry = this.inFlight.get(account);
+    if (!entry || entry.id !== id || entry.cancelled) return;
+    entry.cancelled = true;
     this.db.updateRequest(id, {
       status: "failed",
       error: reason,
