@@ -69,6 +69,7 @@ class GenerationManager {
     this.timeoutMs = (config.request_timeout_seconds || 600) * 1000;
     this.heartbeatIntervalMs =
       (config.heartbeat_interval_seconds || 60) * 1000;
+    this.defaultStyle = config.default_style || null;
     this.inFlight = new Map(); // account -> { id, hordeId, nick, cancel }
   }
 
@@ -103,13 +104,26 @@ class GenerationManager {
       throw new BusyError("you already have a generation in progress");
     }
 
+    let effectiveStyleName = styleName;
+    if (!effectiveStyleName && this.defaultStyle) {
+      effectiveStyleName = this.defaultStyle;
+    }
+
     let style = null;
-    if (styleName) {
-      style = this.styles.get(styleName);
+    if (effectiveStyleName) {
+      style = this.styles.get(effectiveStyleName);
       if (!style) {
-        const hints = this.styles.suggest(styleName);
-        const suggestion = hints.length ? ` Did you mean: ${hints.join(", ")}?` : "";
-        throw new InvalidStyleError(`unknown style "${styleName}".${suggestion}`);
+        // If the user explicitly asked for an unknown style, error out.
+        // If we got here via the configured default and that's missing,
+        // log a warning and proceed with no style rather than blocking.
+        if (styleName) {
+          const hints = this.styles.suggest(styleName);
+          const suggestion = hints.length ? ` Did you mean: ${hints.join(", ")}?` : "";
+          throw new InvalidStyleError(`unknown style "${styleName}".${suggestion}`);
+        }
+        this.logger.warn(
+          `Configured default_style "${this.defaultStyle}" not found in catalog — falling back to no style`
+        );
       }
     }
 

@@ -15,7 +15,8 @@
     "base_url": "https://aihorde.net/api/v2",
     "client_agent": "AIHorde-IRC:0.1:https://github.com/amiantos/ai-horde-irc",
     "poll_interval_seconds": 10,
-    "request_timeout_seconds": 600
+    "request_timeout_seconds": 600,
+    "default_style": "sdxl-landscape"
   },
   "r2": {
     "endpoint": "<R2_ENDPOINT_URL>",

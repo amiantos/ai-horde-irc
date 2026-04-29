@@ -26,7 +26,7 @@ All non-image commands are sent as DM (matching IRC service convention — `/msg
 | `STATUS` | DM | Reports your in-flight request's current state, horde id, and elapsed time. |
 | `CANCEL` | DM | Aborts your in-flight request and tells the horde to drop it. |
 | `HELP` | DM | Prints the command list. |
-| `AIHorde: <prompt> [--style <name>] [--negative <text>]` | Channel or DM | Generates an image. The `--style` flag accepts any name from [haidra-org/AI-Horde-Styles](https://github.com/Haidra-Org/AI-Horde-Styles) (style names can have spaces). With no `--style`, the horde picks reasonable defaults. |
+| `AIHorde: <prompt> [--style <name>] [--negative <text>]` | Channel or DM | Generates an image. The `--style` flag accepts any name from [haidra-org/AI-Horde-Styles](https://github.com/Haidra-Org/AI-Horde-Styles) (style names can have spaces). When `--style` is omitted, the deployment-default style configured in `horde.default_style` is applied; pass `--style raw` to opt out and let the horde pick everything. |
 
 While a generation is in progress the bot DMs queue-position updates whenever they change. Only one generation per user can be in flight at a time.
 

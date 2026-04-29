@@ -21,6 +21,7 @@ const HELP_LINES = [
   "AIHorde — DM commands: LOGIN <api-key>, LOGOUT, USERINFO, STYLES <query>, STATUS, CANCEL, HELP",
   "Image request (channel or DM): \"AIHorde: <prompt> [--style <name>] [--negative <text>]\"",
   "Anyone can request images — anonymous requests use the horde's shared pool (slower). LOGIN with your own API key for priority + kudos tracking. LOGIN requires NickServ identification.",
+  "If you don't pass --style, a deployment-default style is applied. Use \"--style raw\" to opt out and let the horde pick everything.",
   "STYLES searches available style names with preview images. STATUS shows your in-flight request. CANCEL aborts your in-flight request. Status updates are DM-only; final image URL goes back to the channel where you asked.",
 ];
 
