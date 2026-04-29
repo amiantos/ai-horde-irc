@@ -107,6 +107,13 @@ class DB {
       listRequestsByAccount: this.db.prepare(
         `SELECT * FROM requests WHERE account = ? ORDER BY created_at DESC LIMIT ?`
       ),
+      orphanedRequests: this.db.prepare(
+        `UPDATE requests
+         SET status = 'failed',
+             error = 'orphaned: bot restarted while request was in flight',
+             completed_at = ?
+         WHERE status IN ('submitted', 'processing')`
+      ),
       stats: this.db.prepare(
         `SELECT
            (SELECT COUNT(*) FROM users) AS user_count,
@@ -179,6 +186,11 @@ class DB {
 
   listRequestsByAccount(account, limit = 50) {
     return this.q.listRequestsByAccount.all(account, limit);
+  }
+
+  cleanupOrphanedRequests() {
+    const result = this.q.orphanedRequests.run(Date.now());
+    return result.changes;
   }
 
   stats() {

@@ -29,6 +29,10 @@ async function main() {
   const config = require(path.join(__dirname, "conf", "config.json"));
 
   const db = new DB(path.join(__dirname, "data", "ai-horde-irc.db"), logger);
+  const orphaned = db.cleanupOrphanedRequests();
+  if (orphaned > 0) {
+    logger.info(`Marked ${orphaned} orphaned in-flight request${orphaned === 1 ? "" : "s"} as failed`);
+  }
   const irc = new IrcClient(logger, config);
   const nickserv = new NickServVerifier(irc.client, logger);
   const horde = new HordeClient(logger, config.horde || {});
