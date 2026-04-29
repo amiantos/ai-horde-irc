@@ -28,6 +28,19 @@ test("LOGOUT, USERINFO, HELP recognized", () => {
   assert.equal(parseDmCommand("help").type, "HELP");
 });
 
+test("STYLES requires a query", () => {
+  const a = parseDmCommand("STYLES");
+  assert.equal(a.type, "STYLES");
+  assert.equal(a.error, "missing query");
+  const b = parseDmCommand("styles aam");
+  assert.equal(b.type, "STYLES");
+  assert.equal(b.query, "aam");
+  // SEARCH alias works too
+  const c = parseDmCommand("SEARCH dark fantasy");
+  assert.equal(c.type, "STYLES");
+  assert.equal(c.query, "dark fantasy");
+});
+
 test("unknown verb returns null", () => {
   assert.equal(parseDmCommand("DANCE"), null);
   assert.equal(parseDmCommand(""), null);

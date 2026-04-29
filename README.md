@@ -22,6 +22,7 @@ All non-image commands are sent as DM (matching IRC service convention — `/msg
 | `LOGIN <api-key>` | DM | Validates the key against the horde and stores it against your NickServ account. You must be identified with NickServ. |
 | `LOGOUT` | DM | Removes your stored key. |
 | `USERINFO` | DM | Reports your horde username, kudos balance, total requests, worker count. |
+| `STYLES <query>` | DM | Searches available style and category names by substring. Returns up to 8 matches with preview-image links from [AI-Horde-Styles-Previews](https://github.com/amiantos/AI-Horde-Styles-Previews). `SEARCH` is an alias. |
 | `HELP` | DM | Prints the command list. |
 | `AIHorde: <prompt> [--style <name>] [--negative <text>]` | Channel or DM | Generates an image. The `--style` flag accepts any name from [haidra-org/AI-Horde-Styles](https://github.com/Haidra-Org/AI-Horde-Styles) (style names can have spaces). With no `--style`, the horde picks reasonable defaults. |
 

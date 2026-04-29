@@ -6,6 +6,8 @@ const STYLES_URL =
   "https://raw.githubusercontent.com/Haidra-Org/AI-Horde-Styles/main/styles.json";
 const CATEGORIES_URL =
   "https://raw.githubusercontent.com/Haidra-Org/AI-Horde-Styles/main/categories.json";
+const PREVIEWS_URL =
+  "https://raw.githubusercontent.com/amiantos/AI-Horde-Styles-Previews/main/previews.json";
 const REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 class StylesCatalog {
@@ -14,6 +16,7 @@ class StylesCatalog {
     this.cachePath = cachePath;
     this.styles = {};
     this.categories = {};
+    this.previews = {};
     this.refreshTimer = null;
   }
 
@@ -27,6 +30,7 @@ class StylesCatalog {
           const cached = JSON.parse(fs.readFileSync(this.cachePath, "utf8"));
           this.styles = cached.styles || {};
           this.categories = cached.categories || {};
+          this.previews = cached.previews || {};
           this.logger.info(
             `Loaded ${Object.keys(this.styles).length} styles from disk cache`
           );
@@ -44,14 +48,19 @@ class StylesCatalog {
   }
 
   async refresh() {
-    const [stylesRes, catsRes] = await Promise.all([
+    const [stylesRes, catsRes, previewsRes] = await Promise.all([
       axios.get(STYLES_URL, { timeout: 15000 }),
       axios.get(CATEGORIES_URL, { timeout: 15000 }),
+      axios.get(PREVIEWS_URL, { timeout: 15000 }).catch((err) => {
+        this.logger.warn(`Previews fetch failed: ${err.message}`);
+        return { data: this.previews };
+      }),
     ]);
     this.styles = stylesRes.data || {};
     this.categories = catsRes.data || {};
+    this.previews = previewsRes.data || {};
     this.logger.info(
-      `Loaded ${Object.keys(this.styles).length} styles, ${Object.keys(this.categories).length} categories`
+      `Loaded ${Object.keys(this.styles).length} styles, ${Object.keys(this.categories).length} categories, ${Object.keys(this.previews).length} previews`
     );
     this.persistCache();
   }
@@ -62,7 +71,11 @@ class StylesCatalog {
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(
         this.cachePath,
-        JSON.stringify({ styles: this.styles, categories: this.categories })
+        JSON.stringify({
+          styles: this.styles,
+          categories: this.categories,
+          previews: this.previews,
+        })
       );
     } catch (err) {
       this.logger.warn(`Could not persist styles cache: ${err.message}`);
@@ -89,6 +102,55 @@ class StylesCatalog {
     }
 
     return null;
+  }
+
+  // Returns the preview image URL for a style at a given prompt kind
+  // (person|place|thing). Falls back to person, then any available kind.
+  getPreviewUrl(name, kind = "person") {
+    if (!name) return null;
+    const lower = name.toLowerCase().trim();
+    const entry = this.previews[lower];
+    if (!entry) return null;
+    if (entry[kind]) return entry[kind];
+    if (entry.person) return entry.person;
+    const first = Object.values(entry)[0];
+    return first || null;
+  }
+
+  // Search style + category names by query, ranked: exact > prefix > substring > fuzzy.
+  // Returns an array of { name, kind: 'style'|'category', preview }.
+  search(query, limit = 8) {
+    const q = (query || "").toLowerCase().trim();
+    if (!q) return [];
+    const styleNames = Object.keys(this.styles);
+    const catNames = Object.keys(this.categories);
+    const seen = new Map();
+
+    const consider = (name, kind) => {
+      const lower = name.toLowerCase();
+      if (!lower.includes(q) && similarity(q, lower) <= 0.55) return;
+      const score =
+        lower === q ? 4 :
+        lower.startsWith(q) ? 3 :
+        lower.includes(q) ? 2 :
+        similarity(q, lower);
+      const prev = seen.get(lower);
+      if (!prev || score > prev.score) {
+        seen.set(lower, { name: lower, kind, score });
+      }
+    };
+
+    for (const n of styleNames) consider(n, "style");
+    for (const n of catNames) consider(n, "category");
+
+    return [...seen.values()]
+      .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
+      .slice(0, limit)
+      .map((m) => ({
+        name: m.name,
+        kind: m.kind,
+        preview: m.kind === "style" ? this.getPreviewUrl(m.name) : null,
+      }));
   }
 
   suggest(name, limit = 3) {

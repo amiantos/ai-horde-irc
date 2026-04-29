@@ -18,10 +18,10 @@ const {
 const WebServer = require("./web/server");
 
 const HELP_LINES = [
-  "AIHorde — DM commands: LOGIN <api-key>, LOGOUT, USERINFO, HELP",
+  "AIHorde — DM commands: LOGIN <api-key>, LOGOUT, USERINFO, STYLES <query>, HELP",
   "Image request (channel or DM): \"AIHorde: <prompt> [--style <name>] [--negative <text>]\"",
   "Anyone can request images — anonymous requests use the horde's shared pool (slower). LOGIN with your own API key for priority + kudos tracking. LOGIN requires NickServ identification.",
-  "Status updates are DM-only; final image URL goes back to the channel where you asked.",
+  "STYLES searches available style names and links to preview images. Status updates are DM-only; final image URL goes back to the channel where you asked.",
 ];
 
 async function main() {
@@ -58,6 +58,7 @@ async function main() {
         db,
         nickserv,
         horde,
+        styles,
         genManager,
         botNick: irc.botNick,
         logger,
@@ -89,12 +90,12 @@ async function main() {
   process.on("SIGTERM", () => shutdown("SIGTERM"));
 }
 
-async function dispatch({ msg, irc, db, nickserv, horde, genManager, botNick, logger }) {
-  // DM-only command verbs (LOGIN/LOGOUT/USERINFO/HELP)
+async function dispatch({ msg, irc, db, nickserv, horde, styles, genManager, botNick, logger }) {
+  // DM-only command verbs (LOGIN/LOGOUT/USERINFO/STYLES/HELP)
   if (msg.isPrivate) {
     const cmd = parseDmCommand(msg.message);
     if (cmd) {
-      return handleDmCommand({ cmd, msg, irc, db, nickserv, horde, logger });
+      return handleDmCommand({ cmd, msg, irc, db, nickserv, horde, styles, logger });
     }
     // Else fall through — treat DM-style image requests below.
   }
@@ -111,7 +112,7 @@ async function dispatch({ msg, irc, db, nickserv, horde, genManager, botNick, lo
   }
 }
 
-async function handleDmCommand({ cmd, msg, irc, db, nickserv, horde, logger }) {
+async function handleDmCommand({ cmd, msg, irc, db, nickserv, horde, styles, logger }) {
   const replyTo = msg.nick;
   switch (cmd.type) {
     case "HELP":
@@ -173,6 +174,28 @@ async function handleDmCommand({ cmd, msg, irc, db, nickserv, horde, logger }) {
         irc.send(replyTo, `${username} | kudos: ${kudos} | total requests: ${reqs} | workers: ${workers}`);
       } catch (err) {
         irc.send(replyTo, `find_user failed: ${apiErr(err)}`);
+      }
+      return;
+    }
+    case "STYLES": {
+      if (cmd.error) {
+        irc.send(replyTo, "usage: STYLES <query> — searches style/category names");
+        return;
+      }
+      const matches = styles.search(cmd.query, 8);
+      if (!matches.length) {
+        irc.send(replyTo, `no styles found matching "${cmd.query}".`);
+        return;
+      }
+      irc.send(replyTo, `${matches.length} match${matches.length === 1 ? "" : "es"} for "${cmd.query}":`);
+      for (const m of matches) {
+        if (m.kind === "category") {
+          irc.send(replyTo, `  ${m.name} (category — picks a random style from this set)`);
+        } else if (m.preview) {
+          irc.send(replyTo, `  ${m.name} — ${m.preview}`);
+        } else {
+          irc.send(replyTo, `  ${m.name}`);
+        }
       }
       return;
     }
