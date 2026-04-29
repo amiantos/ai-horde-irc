@@ -16,20 +16,42 @@ function generateShortId() {
   return id;
 }
 
-// Build "<nick>: <prompt> <url>" trimmed to fit `maxLen` chars on a single
-// IRC line. If the prompt doesn't fit, we truncate it and append an ellipsis.
+// Build "<nick>: <prompt> <url>" trimmed to fit `maxLen` BYTES on a single IRC
+// line. We size in bytes (not chars) because irc-framework splits messages
+// at byte boundaries — smart quotes, em-dashes, and the trailing ellipsis
+// itself are multi-byte UTF-8, so character-based math undershoots and the
+// real byte length spills past the limit, causing irc-framework to break
+// the URL onto its own line.
+function byteLen(s) {
+  return Buffer.byteLength(s, "utf8");
+}
+
 function formatDeliveryMessage({ nick, prompt, url, maxLen }) {
   const prefix = `${nick}: `;
   const suffix = ` ${url}`;
-  const room = maxLen - prefix.length - suffix.length;
-  let body = prompt || "";
+  const room = maxLen - byteLen(prefix) - byteLen(suffix);
+  const body = prompt || "";
   if (room <= 0) {
     return `${prefix}${suffix.trimStart()}`;
   }
-  if (body.length > room) {
-    body = body.slice(0, Math.max(0, room - 1)).trimEnd() + "…";
+  if (byteLen(body) <= room) {
+    return `${prefix}${body}${suffix}`;
   }
-  return `${prefix}${body}${suffix}`;
+  const ellipsis = "…";
+  const target = room - byteLen(ellipsis);
+  if (target <= 0) {
+    return `${prefix}${ellipsis}${suffix}`;
+  }
+  // Iterate by code point so surrogate pairs stay intact.
+  let truncated = "";
+  let used = 0;
+  for (const ch of body) {
+    const cb = byteLen(ch);
+    if (used + cb > target) break;
+    truncated += ch;
+    used += cb;
+  }
+  return `${prefix}${truncated.trimEnd()}${ellipsis}${suffix}`;
 }
 
 // Polling pattern mirrors ~/Coding/AI-Horde-Styles-Previews/index.js lines 374-430,
