@@ -9,8 +9,8 @@ A small basic-auth-gated web dashboard tracks logins, request history, kudos spe
 ## Quick example
 
 ```
-< amiantos> AIHorde: an idyllic babbling brook --style flux --negative blurry
-< AIHorde > amiantos: an idyllic babbling brook https://your-cdn.example/HnJuX.webp
+<amiantos> AIHorde: an idyllic babbling brook --style sdxl-landscape --negative blurry
+<AIHorde> amiantos: an idyllic babbling brook https://your-cdn.example/HnJuX.webp
 ```
 
 ## Commands
