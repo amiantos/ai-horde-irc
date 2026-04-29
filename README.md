@@ -69,7 +69,9 @@ The dashboard listens on the port from `web.port` in your config (default 3243).
     "base_url": "https://aihorde.net/api/v2",
     "client_agent": "AIHorde-IRC:0.1:https://github.com/amiantos/ai-horde-irc",
     "poll_interval_seconds": 10,
-    "request_timeout_seconds": 600
+    "heartbeat_interval_seconds": 60,
+    "request_timeout_seconds": 600,
+    "default_style": "sdxl-landscape"
   },
   "r2": {
     "endpoint": "https://<account>.r2.cloudflarestorage.com",
@@ -97,7 +99,7 @@ The dashboard listens on the port from `web.port` in your config (default 3243).
 - `@aws-sdk/client-s3` to upload generated images to R2
 - `express` for the web dashboard
 
-The image-request pipeline is a port of the request-builder + style-application logic from [dreamers-guild](https://github.com/amiantos/dreamers-guild) — it fetches the upstream styles catalog from haidra-org at startup (refreshed every 6 hours, with a disk fallback), applies `{p}` / `{np}` template substitution to the user's prompt, copies whitelisted style params (steps, sampler, cfg, dimensions, loras, etc.) onto a base request, and submits to `/api/v2/generate/async`. Polling fires every 10 seconds; status DMs only go out when queue position or processing state actually changes, so a long generation doesn't spam the user.
+The image-request pipeline is a port of the request-builder + style-application logic from [dreamers-guild](https://github.com/amiantos/dreamers-guild) — it fetches the upstream styles catalog from haidra-org at startup (refreshed every 6 hours, with a disk fallback), applies `{p}` / `{np}` template substitution to the user's prompt, copies whitelisted style params (steps, sampler, cfg, dimensions, loras, etc.) onto a base request, and submits to `/api/v2/generate/async`. Polling fires every 10 seconds; status DMs go out when queue position or processing state changes, plus a heartbeat at `heartbeat_interval_seconds` (default 60s) so a stuck request never silently goes dark. After 12 consecutive check failures the bot bails with the underlying error rather than waiting for the hard timeout. On startup, any rows still in `submitted` / `processing` state from a prior run are swept to `failed` since their polling loops no longer exist.
 
 ## Running locally without Docker
 
