@@ -95,23 +95,29 @@ async function main() {
 }
 
 async function dispatch({ msg, irc, db, nickserv, horde, styles, genManager, botNick, logger }) {
-  // DM-only command verbs (LOGIN/LOGOUT/USERINFO/STYLES/HELP)
+  // DM-only command verbs (LOGIN/LOGOUT/USERINFO/STYLES/STATUS/CANCEL/HELP)
   if (msg.isPrivate) {
     const cmd = parseDmCommand(msg.message);
     if (cmd) {
       return handleDmCommand({ cmd, msg, irc, db, nickserv, horde, styles, genManager, logger });
     }
-    // Else fall through — treat DM-style image requests below.
+    // Image-request trigger works in DMs too (with the explicit prefix).
+    const req = parseImageRequest(msg.message, botNick);
+    if (req && req.prompt) {
+      return handleImageRequest({ req, msg, irc, db, nickserv, genManager, logger });
+    }
+    // Anything else: respond with the chanserv-style "unknown command" hint.
+    irc.send(msg.nick, `Invalid ${irc.botNick} command.`);
+    irc.send(msg.nick, `Use /msg ${irc.botNick} HELP for a command listing.`);
+    return;
   }
 
-  // Image-request trigger works in both channels and DMs.
+  // Channel: only respond to image-request triggers and explicit help mentions.
   const req = parseImageRequest(msg.message, botNick);
   if (req && req.prompt) {
     return handleImageRequest({ req, msg, irc, db, nickserv, genManager, logger });
   }
-
-  // Help mention in channel
-  if (!msg.isPrivate && new RegExp(`\\b${escapeRe(botNick)}\\b`, "i").test(msg.message) && /\bhelp\b/i.test(msg.message)) {
+  if (new RegExp(`\\b${escapeRe(botNick)}\\b`, "i").test(msg.message) && /\bhelp\b/i.test(msg.message)) {
     HELP_LINES.forEach((l) => irc.send(msg.target, l));
   }
 }
