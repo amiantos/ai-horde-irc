@@ -83,3 +83,32 @@ test("delivery: empty prompt produces compact form", () => {
   });
   assert.equal(out, "x:  https://example.com/a.webp");
 });
+
+test("delivery: style name appears in brackets before the prompt", () => {
+  const out = formatDeliveryMessage({
+    nick: "amiantos",
+    style: "sdxl-landscape",
+    prompt: "an idyllic babbling brook",
+    url: "https://files.catbox.moe/abc123.webp",
+    maxLen: 350,
+  });
+  assert.equal(
+    out,
+    "amiantos: [sdxl-landscape] an idyllic babbling brook https://files.catbox.moe/abc123.webp"
+  );
+});
+
+test("delivery: style label survives prompt truncation", () => {
+  const long = "a ".repeat(400);
+  const out = formatDeliveryMessage({
+    nick: "amiantos",
+    style: "sdxl-landscape",
+    prompt: long,
+    url: "https://files.catbox.moe/abc123.webp",
+    maxLen: 350,
+  });
+  assert.ok(Buffer.byteLength(out, "utf8") <= 350);
+  assert.ok(out.startsWith("amiantos: [sdxl-landscape] "));
+  assert.ok(out.endsWith(" https://files.catbox.moe/abc123.webp"));
+  assert.ok(out.includes("…"));
+});

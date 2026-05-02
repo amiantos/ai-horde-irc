@@ -26,8 +26,9 @@ function byteLen(s) {
   return Buffer.byteLength(s, "utf8");
 }
 
-function formatDeliveryMessage({ nick, prompt, url, maxLen }) {
-  const prefix = `${nick}: `;
+function formatDeliveryMessage({ nick, style, prompt, url, maxLen }) {
+  const stylePart = style ? `[${style}] ` : "";
+  const prefix = `${nick}: ${stylePart}`;
   const suffix = ` ${url}`;
   const room = maxLen - byteLen(prefix) - byteLen(suffix);
   const body = prompt || "";
@@ -315,6 +316,7 @@ class GenerationManager {
     const maxLen = (this.irc && this.irc.maxLineLength) || 350;
     const deliveryMsg = formatDeliveryMessage({
       nick,
+      style: style ? style.name : null,
       prompt,
       url: hostedUrl,
       maxLen,
