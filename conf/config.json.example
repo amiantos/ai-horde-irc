@@ -26,6 +26,10 @@
     "key_prefix": "",
     "public_base_url": "https://images.example.com"
   },
+  "catbox": {
+    "enabled": true,
+    "userhash": ""
+  },
   "web": {
     "enabled": true,
     "port": 3243,

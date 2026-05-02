@@ -57,11 +57,11 @@ function formatDeliveryMessage({ nick, prompt, url, maxLen }) {
 // Polling pattern mirrors ~/Coding/AI-Horde-Styles-Previews/index.js lines 374-430,
 // adapted to push status updates back to the IRC user as they change.
 class GenerationManager {
-  constructor({ logger, db, hordeClient, r2Uploader, stylesCatalog, ircClient, config }) {
+  constructor({ logger, db, hordeClient, uploader, stylesCatalog, ircClient, config }) {
     this.logger = logger;
     this.db = db;
     this.horde = hordeClient;
-    this.r2 = r2Uploader;
+    this.uploader = uploader;
     this.styles = stylesCatalog;
     this.irc = ircClient;
     this.config = config;
@@ -284,20 +284,20 @@ class GenerationManager {
       return;
     }
 
-    let r2Url;
+    let hostedUrl;
     try {
-      r2Url = await this.r2.upload(gen.img, shortId);
+      hostedUrl = await this.uploader.upload(gen.img, shortId);
     } catch (err) {
-      this.logger.error(`R2 upload failed for ${id}: ${err.message}`);
+      this.logger.error(`image upload failed for ${id}: ${err.message}`);
       if (entry.cancelled) return;
       this.db.updateRequest(id, {
         status: "failed",
-        error: `r2 upload failed: ${err.message}`,
+        error: `image upload failed: ${err.message}`,
         horde_image_url: gen.img,
         completed_at: Date.now(),
       });
       this.inFlight.delete(account);
-      this.dm(nick, `image generated but R2 upload failed; raw URL: ${gen.img}`);
+      this.dm(nick, `image generated but upload failed; raw URL: ${gen.img}`);
       return;
     }
 
@@ -307,7 +307,7 @@ class GenerationManager {
       status: "done",
       kudos: statusRes.kudos || 0,
       horde_image_url: gen.img,
-      r2_image_url: r2Url,
+      r2_image_url: hostedUrl,
       completed_at: Date.now(),
     });
     this.inFlight.delete(account);
@@ -316,14 +316,14 @@ class GenerationManager {
     const deliveryMsg = formatDeliveryMessage({
       nick,
       prompt,
-      url: r2Url,
+      url: hostedUrl,
       maxLen,
     });
     const deliveryTarget = source === "channel" ? channel : nick;
     this.irc.send(deliveryTarget, deliveryMsg);
     if (source === "channel") {
       const kudosNote = statusRes.kudos ? ` (${Math.round(statusRes.kudos)} kudos)` : "";
-      this.dm(nick, `done: ${r2Url}${kudosNote}`);
+      this.dm(nick, `done: ${hostedUrl}${kudosNote}`);
     }
   }
 

@@ -6,6 +6,7 @@ const NickServVerifier = require("./classes/nickserv");
 const HordeClient = require("./classes/horde_client");
 const StylesCatalog = require("./classes/styles_catalog");
 const R2Uploader = require("./classes/r2_uploader");
+const CatboxUploader = require("./classes/catbox_uploader");
 const {
   GenerationManager,
   BusyError,
@@ -41,7 +42,10 @@ async function main() {
     logger,
     path.join(__dirname, "data", "styles_cache.json")
   );
-  const r2 = new R2Uploader(logger, config.r2);
+  const uploader = config.catbox && config.catbox.enabled
+    ? new CatboxUploader(logger, config.catbox)
+    : new R2Uploader(logger, config.r2);
+  logger.info(`image uploader: ${uploader.constructor.name}`);
 
   await styles.load();
 
@@ -49,7 +53,7 @@ async function main() {
     logger,
     db,
     hordeClient: horde,
-    r2Uploader: r2,
+    uploader,
     stylesCatalog: styles,
     ircClient: irc,
     config: config.horde || {},
